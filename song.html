@@ -1,64 +1,225 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>稻香</title>
-  <style>
-    :root {
-      --glass: rgba(255,255,255,0.12);
-      --shadow: rgba(0,0,0,0.28);
-      --overlay: rgba(0,0,0,0.35); /* 背景遮罩深浅 */
-    }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0; padding: 20px; min-height: 100vh;
-      display: flex; align-items: center; justify-content: center; text-align: center;
-      color: #fff; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>稻香</title>
+<style>
+  :root{
+    --overlay: rgba(0,0,0,.35);
+    --active: #fff;
+    --text: rgba(255,255,255,.8);
+    --muted: rgba(255,255,255,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:#fff; font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background-image:
+      linear-gradient(135deg,var(--overlay),var(--overlay)),
+      url("https://raw.githubusercontent.com/hamber2005/daoxiang/main/picture.png?v=1");
+    background-size:auto,cover; background-position:center; background-repeat:no-repeat; background-color:#000;
+    display:grid; grid-template-rows:auto 1fr; gap:12px; padding:24px 16px;
+  }
+  .player{
+    max-width:680px; margin:0 auto; width:100%;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    background: rgba(255,255,255,.12); border-radius:16px; padding:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  audio{width:100%}
 
-      /* 关键：两层背景（遮罩 + 图片），图片用 raw 直链，并加 ?v=1 防缓存 */
-      background-image:
-        linear-gradient(135deg, var(--overlay), var(--overlay)),
-        url("https://raw.githubusercontent.com/hamber2005/daoxiang/main/picture.jpg?v=1");
-      background-size: cover;          /* 铺满 */
-      background-position: center;     /* 居中 */
-      background-repeat: no-repeat;    /* 不平铺 */
-      /* 不用 background-attachment: fixed; 避免 iOS/Safari 问题 */
-    }
-    .container {
-      width: min(92vw, 560px);
-      background: rgba(255,255,255,0.12);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      padding: 38px 30px;
-      border-radius: 20px;
-      box-shadow: 0 16px 40px var(--shadow);
-    }
-    h1 { margin: 0 0 14px; font-size: clamp(24px, 2.6vw + 18px, 34px); text-shadow: 0 2px 10px var(--shadow); }
-    p.sub { margin: 0 0 18px; opacity: .9 }
-    audio { width: 100%; margin: 18px 0 8px; border-radius: 8px; outline: none; }
-    .message { margin-top: 18px; line-height: 1.7; font-size: 16px; }
-    .download { display:inline-block; margin-top:8px; font-size:14px; opacity:.9; color:#fff; }
-    .download:hover { text-decoration: underline; }
-  </style>
+  .lyric-wrap{
+    max-width:680px; margin:0 auto; width:100%;
+    height:min(60vh,520px); /* 歌词可视高度 */
+    overflow:auto; scroll-behavior:smooth;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    background: rgba(255,255,255,.08); border-radius:16px; padding:22px 16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  ul.lyric{list-style:none; padding:0; margin:0; }
+  ul.lyric li{
+    padding:10px 4px; line-height:1.6;
+    color:var(--text); text-align:center; white-space:pre-wrap;
+    transition: transform .25s ease, color .25s ease, opacity .25s ease;
+    opacity:.7;
+  }
+  ul.lyric li.active{
+    color:var(--active); opacity:1;
+    transform: scale(1.06);
+  }
+  ul.lyric li.past{ color:var(--muted); opacity:.6; transform:none }
+  .meta{ max-width:680px; margin:0 auto 4px; text-align:center; opacity:.9 }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>希望大家天天开心！</h1>
-   
 
-    <!-- 音频播放器（使用可直链的 RAW 地址） -->
-    <audio controls preload="none">
+  <div class="player">
+    <audio id="audio" controls preload="metadata">
       <source src="https://raw.githubusercontent.com/hamber2005/daoxiang/main/稻香.mp3" type="audio/mpeg">
       你的浏览器不支持音频播放。
     </audio>
-
-    <!-- 备用下载链接（某些老旧浏览器或跨域策略下可用作兜底） -->
-    <div>
-      <a class="download" href="https://raw.githubusercontent.com/hamber2005/daoxiang/main/稻香.mp3" download>下载歌曲</a>
-    </div>
   </div>
+
+  <div class="meta" id="meta"></div>
+
+  <div class="lyric-wrap" id="scrollBox">
+    <ul class="lyric" id="lyric"></ul>
+  </div>
+
+<script>
+/* ===== 1) 在这里写 LRC（可从网易/QQ 导出），支持多时间戳、偏移 ===== */
+const LRC_TEXT = `
+[ti:稻香] 
+[offset:0]
+[00:30.00]对这个世界如果你有太多的抱怨
+[00:34.00]跌倒了就不敢继续往前走
+[00:37.00]为什么人要这么的脆弱堕落
+[00:41.00]请你打开电视看看
+[00:43.00]多少人为生命在努力勇敢的走下去
+[00:47.00]我们是不是该知足
+[00:50.00]珍惜一切就算没有拥有
+[00:54.00]还记得你说家是唯一的城堡
+[00:57.00]随着稻香河流继续奔跑
+[01:00.00]微微笑 小时候的梦我知道
+[01:05.00]不要哭让萤火虫带着你逃跑
+[01:09.00]乡间的歌谣永远的依靠
+[01:12.00]回家吧 回到最初的美好
+[01:40:00]不要这么容易就想放弃
+[01:43:00]就像我说的
+[01:45:00]追不到的梦想换个梦不就得了
+[01:47:00]为自己的人生鲜艳上色
+[01:50:00]先把爱涂上喜欢的颜色
+[01:52:00]笑一个吧
+[01:53:00]功成名就不是目的
+[01:55:00]让自己快乐快乐这才叫做意义
+[01:58:00]童年的纸飞机
+[02:00:00]现在终于飞回我手里
+[02:04:00]所谓的那快乐
+[02:06:00]赤脚在田里追蜻蜓追到累了
+[02:08:00]偷摘水果被蜜蜂给叮到怕了
+[02:11:00]谁在偷笑呢
+[02:13:00]我靠着稻草人
+[02:14:00]吹着风 唱着歌 睡着了
+[02:17:00]午后吉他在虫鸣中更清脆
+[02:20:00]阳光洒在路上就不怕心碎
+[02:23:00]珍惜一切 就算没有拥有
+[02:27:00]还记得你说家是唯一的城堡
+[02:31:00]随着稻香河流继续奔跑
+[02:34:00]微微笑 小时候的梦我知道
+[02:38:00]不要哭让萤火虫带着你逃跑
+[02:42:00]乡间的歌谣永远的依靠
+[02:46:00]回家吧 回到最初的美好
+[02:50:00]还记得你说家是唯一的城堡
+[02:54:00]随着稻香河流继续奔跑
+[02:57:00]微微笑 小时候的梦我知道
+[03:02:00]不要哭让萤火虫带着你逃跑
+[03:06:00]乡间的歌谣永远的依靠
+[03:09:00]回家吧 回到最初的美好
+`;
+
+
+/* ===== 2) 解析 LRC ===== */
+function parseLRC(lrc){
+  const meta = {ti:'',ar:'',al:'',offset:0};
+  const lines = [];
+  const rgxTime = /\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]/g;
+
+  lrc.split(/\r?\n/).forEach(raw=>{
+    const line = raw.trim();
+    if(!line) return;
+
+    // 元信息
+    const mMeta = line.match(/^\[(ti|ar|al|by|offset):\s*(.*?)\s*]$/i);
+    if(mMeta){
+      const k = mMeta[1].toLowerCase();
+      if(k === 'offset') meta.offset = parseInt(mMeta[2]||0,10) || 0;
+      else meta[k] = mMeta[2];
+      return;
+    }
+
+    // 可能含多个时间标签
+    let text = line.replace(rgxTime,'').trim();
+    if(!text) text = '♪';
+
+    let m;
+    while((m = rgxTime.exec(line)) !== null){
+      const min = parseInt(m[1],10);
+      const sec = parseInt(m[2],10);
+      const cs  = parseInt((m[3]||'0').padEnd(3,'0'),10); // 毫秒
+      const t = min*60 + sec + cs/1000;
+      lines.push({ t, text });
+    }
+    rgxTime.lastIndex = 0; // 重置
+  });
+
+  // 排序并应用 offset（ms）
+  if(meta.offset) {
+    const off = meta.offset/1000;
+    lines.forEach(o => o.t += off);
+  }
+  lines.sort((a,b)=>a.t-b.t);
+  return {meta,lines};
+}
+
+/* ===== 3) 渲染到页面 ===== */
+const {meta, lines} = parseLRC(LRC_TEXT);
+document.getElementById('meta').textContent =
+  [meta.ti, meta.ar && `- ${meta.ar}`, meta.al && `（${meta.al}）`].filter(Boolean).join(' ');
+const ul = document.getElementById('lyric');
+ul.innerHTML = lines.map((l,i)=>`<li data-i="${i}" data-t="${l.t}">${l.text}</li>`).join('');
+const lis = [...ul.querySelectorAll('li')];
+
+const audio = document.getElementById('audio');
+const scrollBox = document.getElementById('scrollBox');
+let activeIndex = -1;
+
+/* 点击某行跳转播放 */
+ul.addEventListener('click', e=>{
+  const li = e.target.closest('li');
+  if(!li) return;
+  const t = parseFloat(li.dataset.t||'0');
+  if(!isNaN(t)) audio.currentTime = Math.max(0, t - 0.2);
+  audio.play();
+});
+
+/* ===== 4) 同步滚动 ===== */
+function setActive(i){
+  if(i === activeIndex || i < 0 || i >= lis.length) return;
+  if(activeIndex>=0) lis[activeIndex].classList.remove('active');
+  lis.forEach((el,idx)=>{
+    el.classList.toggle('past', idx < i);
+  });
+  lis[i].classList.add('active');
+  activeIndex = i;
+
+  const el = lis[i];
+  const box = scrollBox;
+  const target = el.offsetTop - (box.clientHeight/2 - el.clientHeight/2);
+  box.scrollTo({top: target, behavior:'smooth'});
+}
+
+function findIndexByTime(t){
+  // 在已排序的 lines 中找“最后一个 <= t”的索引
+  let lo=0, hi=lines.length-1, ans=-1;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1;
+    if(lines[mid].t <= t){ ans=mid; lo=mid+1; }
+    else hi=mid-1;
+  }
+  return ans;
+}
+
+audio.addEventListener('timeupdate', ()=>{
+  const i = findIndexByTime(audio.currentTime);
+  setActive(i);
+});
+
+/* 支持从头开始时把滚动重置 */
+audio.addEventListener('seeking', ()=>{
+  const i = findIndexByTime(audio.currentTime);
+  setActive(i);
+});
+</script>
 </body>
 </html>
-
